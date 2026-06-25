@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock-X · Real-time Stock Displayer</title>
+  <!-- Chart.js + the date adapter for time-axis charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --panel: #131822;
+      --panel-2: #1b212e;
+      --border: #283041;
+      --text: #e6e9ef;
+      --muted: #8b94a7;
+      --accent: #4f8cff;
+      --up: #16c784;
+      --down: #ea3943;
+      --up-soft: rgba(22, 199, 132, .14);
+      --down-soft: rgba(234, 57, 67, .14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(1200px 600px at 80% -10%, #16203a 0%, var(--bg) 55%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 60px; }
+
+    header.app { display: flex; align-items: baseline; gap: 12px; margin-bottom: 22px; }
+    header.app h1 { font-size: 22px; margin: 0; letter-spacing: .5px; }
+    header.app .logo { color: var(--accent); }
+    header.app .tag { color: var(--muted); font-size: 13px; }
+
+    /* Search */
+    .search { position: relative; display: flex; gap: 10px; margin-bottom: 18px; }
+    .search input {
+      flex: 1; background: var(--panel); border: 1px solid var(--border);
+      color: var(--text); padding: 14px 16px; border-radius: 12px; font-size: 16px; outline: none;
+    }
+    .search input:focus { border-color: var(--accent); }
+    .search button {
+      background: var(--accent); color: #fff; border: none; padding: 0 22px;
+      border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+    .search button:hover { filter: brightness(1.08); }
+    .suggest {
+      position: absolute; top: 56px; left: 0; right: 120px; z-index: 30;
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px;
+      overflow: hidden; box-shadow: 0 18px 40px rgba(0,0,0,.45); display: none;
+    }
+    .suggest.open { display: block; }
+    .suggest div.item { padding: 11px 14px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
+    .suggest div.item:hover, .suggest div.item.active { background: #232b3b; }
+    .suggest .sym { font-weight: 700; }
+    .suggest .nm { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .suggest .ex { color: var(--muted); font-size: 12px; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .chip {
+      background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+      padding: 7px 13px; border-radius: 999px; font-size: 13px; cursor: pointer; user-select: none;
+    }
+    .chip:hover { color: var(--text); }
+    .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* Quote header */
+    .quote { display: none; align-items: flex-end; gap: 18px; flex-wrap: wrap; margin: 6px 0 18px; }
+    .quote.show { display: flex; }
+    .quote .name { font-size: 15px; color: var(--muted); }
+    .quote .name b { color: var(--text); font-size: 19px; }
+    .quote .price { font-size: 38px; font-weight: 700; line-height: 1; }
+    .quote .delta { font-size: 16px; font-weight: 600; padding: 4px 10px; border-radius: 8px; }
+    .delta.up { color: var(--up); background: var(--up-soft); }
+    .delta.down { color: var(--down); background: var(--down-soft); }
+
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+    .chart-card { position: relative; height: 420px; margin-bottom: 18px; }
+    #chart { width: 100% !important; height: 100% !important; }
+
+    /* Stats grid */
+    .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 13px 14px; }
+    .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+    .stat .val { font-size: 19px; font-weight: 600; margin-top: 5px; }
+    .val.up { color: var(--up); }
+    .val.down { color: var(--down); }
+
+    /* Verdict banner */
+    .verdict { display: none; margin: 18px 0; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--border); }
+    .verdict.show { display: block; }
+    .verdict.bull { background: var(--up-soft); border-color: rgba(22,199,132,.4); }
+    .verdict.bear { background: var(--down-soft); border-color: rgba(234,57,67,.4); }
+    .verdict.flat { background: var(--panel-2); }
+    .verdict h3 { margin: 0 0 6px; font-size: 17px; }
+    .verdict p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+    .status { color: var(--muted); font-size: 14px; padding: 10px 2px; min-height: 22px; }
+    .status.err { color: var(--down); }
+    .hidden { display: none !important; }
+    .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 24px 0 10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="app">
+      <h1><span class="logo">◆</span> Stock-X</h1>
+      <span class="tag">real-time prices · trajectory &amp; trend insights · data by Tiingo</span>
+    </header>
+
+    <div class="search">
+      <input id="symbolInput" type="text" placeholder="Search a stock — e.g. IBM, AAPL, Tesla, MSFT…"
+             autocomplete="off" spellcheck="false" />
+      <button id="goBtn">Show</button>
+      <div id="suggest" class="suggest"></div>
+    </div>
+
+    <div id="rangeChips" class="chips">
+      <div class="chip" data-range="1d">1D</div>
+      <div class="chip" data-range="5d">5D</div>
+      <div class="chip active" data-range="1mo">1M</div>
+      <div class="chip" data-range="6mo">6M</div>
+      <div class="chip" data-range="ytd">YTD</div>
+      <div class="chip" data-range="1y">1Y</div>
+      <div class="chip" data-range="5y">5Y</div>
+      <div class="chip" data-range="max">MAX</div>
+    </div>
+
+    <div id="quote" class="quote">
+      <div class="name"><b id="qSymbol">—</b> · <span id="qName">—</span> <span id="qExch"></span></div>
+      <div id="qPrice" class="price">—</div>
+      <div id="qDelta" class="delta">—</div>
+    </div>
+
+    <div id="status" class="status">Type a stock symbol or company name to begin.</div>
+
+    <div class="card chart-card">
+      <canvas id="chart"></canvas>
+    </div>
+
+    <div id="verdict" class="verdict"></div>
+
+    <div class="section-title">Key statistics</div>
+    <div id="stats" class="stats"></div>
+  </div>
+
+  <script src="stock_displayer.js"></script>
+</body>
+</html>
