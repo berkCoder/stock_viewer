@@ -314,7 +314,7 @@
       )
       .join("");
   }
-
+ /* made by BERKCODER */
   function renderChart(data, a) {
     const up = a.periodChange >= 0;
     const color = up ? "#16c784" : "#ea3943";
