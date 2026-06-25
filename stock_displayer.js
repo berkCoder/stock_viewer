@@ -1,4 +1,4 @@
-/* stock_displayer.js — Stock-X frontend.
+/* stock_displayer.js — frontend.
  *
  * Talks to the local stock_finder.py backend:
  *   GET /api/search?q=...
