@@ -117,7 +117,7 @@ def tg_get(path, ttl=60):
     _cache_put(path, data, ttl)
     return data
 
-
+# made by BERKCODER 
 def _f(v):
     """Parse a value -> float or None."""
     try:
